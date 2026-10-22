@@ -1,0 +1,39 @@
+// Sentinel SOC Home Lab: KQL queries
+// Workspace: law-soc-lab | Endpoint: soc-lab-vm
+// Run in Microsoft Sentinel > Logs, or Defender portal > Advanced hunting.
+
+// 1. Proves: Windows Security events are reaching Sentinel, and which event types
+SecurityEvent
+| summarize count() by EventID
+| sort by count_ desc
+
+// 2. Proves: Sysmon events from soc-lab-vm are reaching Sentinel
+WindowsEvent
+| where Channel == "Microsoft-Windows-Sysmon/Operational"
+| take 20
+
+// 3. Proves: which Sysmon event types (process, registry, DNS, network) are collected
+WindowsEvent
+| where Channel == "Microsoft-Windows-Sysmon/Operational"
+| summarize count() by EventID
+
+// 4. Proves: every program that starts on the VM is logged (Sysmon Event ID 1)
+WindowsEvent
+| where Channel == "Microsoft-Windows-Sysmon/Operational"
+| where EventID == 1
+| take 30
+
+// 5. Proves: who failed to log on and from where (Event ID 4625); here, 1 local failure and no internet brute force
+SecurityEvent
+| where EventID == 4625
+| summarize Attempts = count() by TargetAccount, IpAddress
+| sort by Attempts desc
+
+// 6. Proves: commands I ran on the VM can be traced in the SIEM with user, host, time and full command line
+WindowsEvent
+| where Channel == "Microsoft-Windows-Sysmon/Operational"
+| where EventID == 1
+| extend CommandLine = tostring(EventData.CommandLine), User = tostring(EventData.User)
+| where CommandLine has_any ("whoami", "ipconfig", "nslookup")
+| project TimeGenerated, Computer, User, CommandLine
+| sort by TimeGenerated desc
